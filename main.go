@@ -59,6 +59,32 @@ func main() {
 		os.Exit(1)
 	}
 
+	err = ctrl.NewControllerManagedBy(mgr).
+		For(&corev1.Service{}).
+		Watches(&source.Kind{Type: &corev1.Endpoints{}}, &handler.EnqueueRequestsFromMapFunc{
+			ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []ctrl.Request {
+				if obj.Meta.GetNamespace() == "kube-system" {
+					return nil
+				}
+				return []ctrl.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Namespace: obj.Meta.GetNamespace(),
+							Name:      obj.Meta.GetName(),
+						},
+					},
+				}
+			}),
+		}).
+		Complete((&controllers.TestServiceController{
+			Client: mgr.GetClient(),
+			Log:    ctrl.Log.WithName("controllers").WithName("testservice"),
+		}))
+	if err != nil {
+		setupLog.Error(err, "unable to create controller")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
